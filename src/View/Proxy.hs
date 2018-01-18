@@ -46,7 +46,7 @@ makeProxy :: (FocusCore vs a, WSTag a) => View -> Way vs a ()
 makeProxy v = do
     ref <- liftIO $ newIORef undefined
     fun <- makeCallback removeView
-    new <- createView (ProxiedView fun v ref)
+    new <- createView (ProxiedView fun v ref) (viewDamage v)
     liftIO $ writeIORef ref new
     addViewDestroyListener (getViewID new) (const $ closeView new) v
     insertView new

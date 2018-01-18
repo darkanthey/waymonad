@@ -50,9 +50,6 @@ module View
     , addViewResizeListener
     , rmViewResizeListener
     , triggerViewResize
-
-    , viewSetClean
-    , viewIsDirty
     )
 where
 
@@ -106,9 +103,9 @@ data View = forall a. ShellSurface a => View
     , viewScaling  :: IORef Float
     , viewDestroy  :: IORef (IntMap (View -> IO ()))
     , viewResize   :: IORef (IntMap (View -> IO ()))
+    , viewDamage   :: View -> IO ()
     , viewID       :: Int
     , viewTokens   :: [ListenerToken]
-    , viewDirty    :: IORef Bool
     }
 
 instance Show View where
@@ -142,7 +139,7 @@ removeListeners View {viewTokens = toks} =
 
 handleCommit :: MonadIO m => View -> IORef (Double, Double) -> m ()
 handleCommit view ref = liftIO $ do
-    writeIORef (viewDirty view) True
+    viewDamage view view
     (width, height) <- getViewSize view
     (oldWidth, oldHeight) <- readIORef ref
     when (oldWidth /= width || oldHeight /= height) $ do
@@ -150,8 +147,8 @@ handleCommit view ref = liftIO $ do
         writeIORef ref (width, height)
         triggerViewResize view
 
-createView :: (ShellSurface a, MonadIO m) => a -> m View
-createView surf = liftIO $ do
+createView :: (ShellSurface a, MonadIO m) => a -> (View -> IO ()) -> m View
+createView surf damage = liftIO $ do
     (width, height) <- getSize surf
     let box = WlrBox 0 0 (floor width) (floor height)
     global <- newIORef box
@@ -179,7 +176,6 @@ createView surf = liftIO $ do
 
             pure [destroyHandler, commitHandler]
 
-    dirty <- newIORef True
     let ret = View
             { viewSurface = surf
             , viewBox = global
@@ -189,7 +185,7 @@ createView surf = liftIO $ do
             , viewResize = resizeCBs
             , viewID = idVal
             , viewTokens = tokens
-            , viewDirty = dirty
+            , viewDamage = damage
             }
     writeIORef viewRef ret
     pure ret
@@ -309,9 +305,3 @@ triggerViewResize :: MonadIO m => View -> m ()
 triggerViewResize v@View {viewResize = ref} = liftIO $ do
     cbs <- readIORef ref
     mapM_ ($ v) cbs
-
-viewIsDirty :: MonadIO m => View -> m Bool
-viewIsDirty = liftIO . readIORef . viewDirty
-
-viewSetClean :: MonadIO m => View -> m ()
-viewSetClean = liftIO . flip writeIORef False . viewDirty

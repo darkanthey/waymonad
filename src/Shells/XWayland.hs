@@ -65,6 +65,7 @@ import View
 import ViewSet (WSTag, FocusCore)
 import WayUtil.Log (logPutText, LogPriority (..))
 import WayUtil.Signal (setSignalHandler, setDestroyHandler)
+import WayUtil.Damage (damageFun)
 import Waymonad
 import Waymonad.Types
     ( Compositor (..)
@@ -209,7 +210,7 @@ handleXwaySurface xway ref surf = do
     case parent of
         Nothing -> do
             logPutText loggerX11 Trace "Creating an normal view"
-            view <- createView xwaySurf
+            view <- createView xwaySurf =<< damageFun
             liftIO $ modifyIORef ref $ M.insert (ptrToInt surf) view
             insertView view
 

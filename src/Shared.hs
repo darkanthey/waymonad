@@ -32,6 +32,7 @@ module Shared
     )
 where
 
+import System.IO
 import Control.Monad (void)
 import Control.Monad.IO.Class (MonadIO, liftIO)
 import UnliftIO.Exception (bracket)
@@ -165,13 +166,14 @@ foreign import ccall "wl_display_add_socket" c_add_socket :: Ptr DisplayServer -
 
 backendMain :: (FocusCore vs a, WSTag a) => CompHooks vs a -> DisplayServer -> Ptr Backend -> Way vs a ()
 backendMain hooks display backend = do
-    shells <- wayCoreShells <$> getState
-    mapM_ startShell shells
+    liftIO $ hPutStrLn stderr "Doing backendMain"
     -- This dispatches the first events, e.g. output/input add signals
     liftIO $ do
         backendStart backend
         setEnv "WAYLAND_DISPLAY" =<< getEnv "_WAYLAND_DISPLAY"
         unsetEnv "_WAYLAND_DISPLAY"
+    shells <- wayCoreShells <$> getState
+    mapM_ startShell shells
     -- Start the hooks that want to run *after* the backend got initialised and
     -- run the display
     foldBrackets (backendPostHook hooks) (const $ liftIO $ displayRun display) ()
@@ -193,6 +195,7 @@ bindSocket display = liftIO $ do
 
 displayMain :: (FocusCore vs a, WSTag a) => CompHooks vs a -> DisplayServer -> Way vs a ()
 displayMain hooks display = do
+    liftIO $ hPutStrLn stderr "Doing displayMain"
     let outAdd = Bracketed (liftIO . addListener (WlListener $ handleOutputAdd hooks) . outputAdd . backendGetSignals . snd) (liftIO .  removeListener)
     let outRem = Bracketed (liftIO . addListener (WlListener $ handleOutputRemove hooks) . outputRemove . backendGetSignals . snd) (liftIO .  removeListener)
     liftIO $ do

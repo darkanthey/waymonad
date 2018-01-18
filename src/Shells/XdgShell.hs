@@ -52,7 +52,8 @@ import Utility (doJust, ptrToInt)
 import View
 import ViewSet (WSTag, FocusCore)
 import WayUtil.Log (logPutText, LogPriority (..))
-import WayUtil.Signal (setDestroyHandler)
+import WayUtil.Signal (setDestroyHandler, setSignalHandler)
+import WayUtil.Damage (damageFun)
 import Waymonad
 import Waymonad.Types
 
@@ -144,7 +145,7 @@ handleXdgSurface ref surf = do
     unless isPopup $ do
         logPutText loggerXdg Debug "New xdg toplevel surface"
         let xdgSurf = XdgSurface surf
-        view <- createView xdgSurf
+        view <- createView xdgSurf =<< damageFun
         insertView view
 
         liftIO $ do

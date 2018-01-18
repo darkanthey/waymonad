@@ -40,7 +40,7 @@ import qualified Data.IntMap as IM
 import qualified Data.Set as S
 
 import View
-    ( View
+    ( View (viewDamage)
     , ShellSurface (..)
     , getViewSurface
     , getViewSize
@@ -153,7 +153,7 @@ deriveSlave multi = do
                 { slaveMulti = multi
                 , slaveId = sId
                 }
-        ret <- createView slave
+        ret <- createView slave (viewDamage $ multiMaster multi)
         modifyIORef (multiSlaves multi) (IM.insert sId ret)
         modifyIORef (multiSlaveBoxes multi) (IM.insert sId (WlrBox 0 0 0 0))
         pure ret

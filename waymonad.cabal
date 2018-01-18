@@ -132,6 +132,7 @@ executable waymonad
   other-modules:        WayUtil.Timing
   other-modules:        WayUtil.View
   other-modules:        WayUtil.ViewSet
+  other-modules:        WayUtil.Damage
 
   other-modules:        Waymonad
   other-modules:        Waymonad.Main

@@ -74,6 +74,7 @@ module Output
     , addOutputToWork
     , removeOutputFromWork
     , getOutputBox
+    , frameHandler
     )
 where
 
@@ -114,7 +115,7 @@ import Graphics.Wayland.WlRoots.Output
     , getOutputName
     , getOutputScale
 
---    , getOutputNeedsSwap
+    , getOutputNeedsSwap
     , setOutputNeedsSwap
     , isOutputEnabled
     , setOutputMode
@@ -171,8 +172,6 @@ import View
     , getViewBox
     , viewGetScale
     , viewGetLocal
---    , viewIsDirty
-    , viewSetClean
     )
 import ViewSet (WSTag (..))
 import Waymonad
@@ -189,6 +188,7 @@ data Output = Output
     { outputRoots  :: Ptr WlrOutput
     , outputName   :: Text
     , outputActive :: IORef Bool
+    , outputSkipped :: IORef Bool
     }
 
 instance Show Output where
@@ -251,7 +251,6 @@ outputHandleSurface comp secs output surface scaleFactor box = do
 
 outputHandleView :: Compositor -> Double -> Ptr WlrOutput -> View -> WlrBox -> IO (IO ())
 outputHandleView comp secs output view box = doJust (getViewSurface view) $ \surface -> do
-    viewSetClean view
     scale <- viewGetScale view
     local <- viewGetLocal view
     let lBox = box { boxX = boxX box + boxX local, boxY = boxY box + boxY local}
@@ -275,9 +274,10 @@ outputHandleView comp secs output view box = doJust (getViewSurface view) $ \sur
 frameHandler
     :: WSTag a
     => Double
-    -> Ptr WlrOutput
+    -> Output
     -> Way vs a ()
-frameHandler secs output = do
+frameHandler secs out = do
+    let output = outputRoots out
     enabled <- liftIO $ isOutputEnabled output
     when enabled $ do
         comp <- wayCompositor <$> getState
@@ -289,20 +289,23 @@ frameHandler secs output = do
     --        Nothing -> pure mempty
     --        Just surf -> Any <$> surfaceHasDamage surf)) (fmap fst $ join $ maybeToList viewsM)
         {-needsRedraw <- mapM (fmap Any . viewIsDirty) (fmap fst $ join $ maybeToList viewsM)
-        needsSwap <- liftIO $ getOutputNeedsSwap output
         when (getAny (foldr (<>) mempty needsRedraw) || needsSwap) $-}
-        liftIO $ renderOn output (compRenderer comp) $ do
-            case viewsM of
-                Nothing -> pure ()
-                Just wsViews -> do
-                    overs <- mapM (uncurry $ outputHandleView comp secs output) wsViews
-                    sequence_ overs
-            forM_ floats $ \view -> do
-                (WlrBox x y w h) <- getViewBox view
-                let box = WlrBox (x - ox) (y - oy) w h
-                outputHandleView comp secs output view box
-
-    where  intersects layout view = liftIO (outputIntersects layout output =<< getViewBox view)
+        needsSwap <- liftIO $ getOutputNeedsSwap output
+        if needsSwap
+            then do
+                liftIO $ writeIORef (outputSkipped out) False
+                liftIO $ renderOn output (compRenderer comp) $ do
+                    case viewsM of
+                        Nothing -> pure ()
+                        Just wsViews -> do
+                            overs <- mapM (uncurry $ outputHandleView comp secs output) wsViews
+                            sequence_ overs
+                    forM_ floats $ \view -> do
+                        (WlrBox x y w h) <- getViewBox view
+                        let box = WlrBox (x - ox) (y - oy) w h
+                        outputHandleView comp secs output view box
+            else liftIO $ writeIORef (outputSkipped out) True
+    where   intersects layout view = liftIO (outputIntersects layout (outputRoots out) =<< getViewBox view)
 
 findMode
     :: MonadIO m
@@ -336,11 +339,12 @@ handleOutputAdd hook output = do
 
     current <- wayBindingOutputs <$> getState
     active <- liftIO $ newIORef False
-    let out = Output output name active
+    skipped <- liftIO $ newIORef False
+    let out :: Output = Output output name active skipped
     liftIO $ modifyIORef current (out :)
 
     hook out
-    makeCallback2 frameHandler
+    makeCallback2 $ \t _ -> frameHandler t out
 
 
 handleOutputRemove
@@ -418,4 +422,3 @@ getOutputBox Output { outputRoots = output } = do
     width <- liftIO $ getWidth output
     height <- liftIO $ getHeight output
     pure $ Just $ WlrBox ox oy (fromIntegral width) (fromIntegral height)
-
